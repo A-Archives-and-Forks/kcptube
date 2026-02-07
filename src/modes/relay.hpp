@@ -20,6 +20,8 @@ class relay_mode
 	std::shared_mutex mutex_ipv6;
 	std::array<uint8_t, 16> external_ipv6_address;
 	const std::array<uint8_t, 16> zero_value_array;
+	const std::unique_ptr<Botan::ZFEC> fecc_ingress;
+	const std::unique_ptr<Botan::ZFEC> fecc_egress;
 #ifdef __cpp_lib_atomic_shared_ptr
 	std::atomic<std::shared_ptr<std::vector<uint16_t>>> remote_destination_ports;
 #else
@@ -90,8 +92,8 @@ class relay_mode
 	void data_sender_via_listener(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, size_t buffer_size);
 	void data_sender_via_forwarder(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, size_t buffer_size);
 	std::pair<bool, size_t> fec_find_missings(KCP::KCP *kcp_ptr, fec_control_data &fec_controllor, uint32_t fec_sn, uint8_t max_fec_data_count);
-	void fec_maker_via_listener(kcp_mappings *kcp_mappings_ptr, const uint8_t *input_data, int data_size);
-	void fec_maker_via_forwarder(kcp_mappings *kcp_mappings_ptr, const uint8_t *input_data, int data_size);
+	void fec_maker_via_listener(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, uint8_t *input_data, int data_size);
+	void fec_maker_via_forwarder(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, uint8_t *input_data, int data_size);
 
 	void process_disconnect(std::shared_ptr<KCP::KCP> kcp_ptr, const char *buffer, size_t len);
 	std::unique_ptr<udp::endpoint> get_udp_target(std::shared_ptr<forwarder> target_connector, size_t index);
@@ -121,6 +123,8 @@ public:
 		io_context_light(io_context_light),
 		io_context_heavy(io_context_heavy),
 		kcp_updater(kcp_updater_ref),
+		fecc_ingress(settings.ingress == nullptr ? nullptr : fec_initialse(settings.ingress->fec_original_packet_count, settings.ingress->fec_redundant_packet_count)),
+		fecc_egress(settings.egress == nullptr ? nullptr : fec_initialse(settings.egress->fec_original_packet_count, settings.egress->fec_redundant_packet_count)),
 		timer_find_expires(io_context_light), timer_expiring_kcp(io_context_light),
 		timer_stun(io_context_light),
 		timer_keep_alive_ingress(io_context_light), timer_keep_alive_egress(io_context_light),
@@ -149,7 +153,10 @@ public:
 		external_ipv6_port(existing_relay.external_ipv6_port.load()),
 		external_ipv6_address{ existing_relay.external_ipv6_address },
 		zero_value_array{},
-		current_settings(std::move(existing_relay.current_settings)) {}
+		current_settings(std::move(existing_relay.current_settings)),
+		fecc_ingress(current_settings.ingress == nullptr ? nullptr : fec_initialse(current_settings.ingress->fec_original_packet_count, current_settings.ingress->fec_redundant_packet_count)),
+		fecc_egress(current_settings.egress == nullptr ? nullptr : fec_initialse(current_settings.egress->fec_original_packet_count, current_settings.egress->fec_redundant_packet_count))
+	{}
 
 	~relay_mode();
 

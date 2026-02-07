@@ -16,6 +16,7 @@ class test_mode
 	std::vector<std::string> destination_address_list;
 	std::string encryption_password;
 	encryption_mode encryption;
+	const std::unique_ptr<Botan::ZFEC> fecc;
 
 	std::shared_mutex mutex_handshakes;
 	std::unordered_map<kcp_mappings*, std::shared_ptr<kcp_mappings>> handshakes;
@@ -57,6 +58,7 @@ public:
 	test_mode(asio::io_context &io_context_ref, KCP::KCPUpdater &kcp_updater_ref, /*ttp::task_group_pool &seq_task_pool,*/ /*size_t task_count_limit,*/ const user_settings &settings) :
 		io_context(io_context_ref),
 		kcp_updater(kcp_updater_ref),
+		fecc(fec_initialse(settings.fec_original_packet_count, settings.fec_redundant_packet_count)),
 		timer_find_expires(io_context_ref),
 		current_settings(settings),
 		conn_options{ .ip_version_only = current_settings.ip_version_only,
@@ -69,6 +71,7 @@ public:
 		kcp_updater(existing_client.kcp_updater),
 		timer_find_expires(std::move(existing_client.timer_find_expires)),
 		current_settings(std::move(existing_client.current_settings)),
+		fecc(fec_initialse(current_settings.fec_original_packet_count, current_settings.fec_redundant_packet_count)),
 		conn_options{ .ip_version_only = current_settings.ip_version_only,
 					  .fib_ingress = current_settings.fib_ingress,
 					  .fib_egress = current_settings.fib_egress }

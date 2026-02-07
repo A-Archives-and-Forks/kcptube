@@ -69,12 +69,6 @@
     <ClCompile Include="..\..\src\networks\mux_tunnel.cpp">
       <Filter>Source Files\networks</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\3rd_party\fecpp_ssse3.cpp">
-      <Filter>Source Files\3rd_party</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\3rd_party\fecpp.cpp">
-      <Filter>Source Files\3rd_party</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\modes\server.cpp">
       <Filter>Source Files\modes</Filter>
     </ClCompile>
@@ -127,9 +121,6 @@
     </ClInclude>
     <ClInclude Include="..\..\src\networks\mux_tunnel.hpp">
       <Filter>Header Files\networks</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\3rd_party\fecpp.hpp">
-      <Filter>Header Files\3rd_party</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\modes\server.hpp">
       <Filter>Header Files\modes</Filter>

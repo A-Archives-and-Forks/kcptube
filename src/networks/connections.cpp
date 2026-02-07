@@ -476,6 +476,21 @@ namespace packet
 		return new_size;
 	}
 
+	std::pair<uint8_t *, int> prepend_fec_header(uint8_t *input_data, int data_size, uint32_t fec_sn, uint8_t fec_sub_sn)
+	{
+		int64_t timestamp = right_now();
+		constexpr uint16_t header_size = raw_header_fec_data_size;
+		uint8_t *data_ptr = input_data - header_size;
+		packet_layer_data *pkt_data_ptr = (packet_layer_data *)data_ptr;
+		int new_size = header_size + data_size;
+
+		pkt_data_ptr->timestamp = host_to_little_endian((uint32_t)timestamp);
+		pkt_data_ptr->sn = htonl(fec_sn);
+		pkt_data_ptr->sub_sn = fec_sub_sn;
+
+		return { data_ptr, new_size };
+	}
+	
 	std::tuple<uint32_t, uint8_t*, size_t> unpack(uint8_t *data, size_t length)
 	{
 		packet_layer *ptr = (packet_layer *)data;

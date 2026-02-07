@@ -14,6 +14,8 @@ class client_mode
 	KCP::KCPUpdater &kcp_updater;
 	user_settings current_settings;
 	connection_options conn_options;
+	const std::unique_ptr<Botan::ZFEC> fecc;
+
 #ifdef __cpp_lib_atomic_shared_ptr
 	std::atomic<std::shared_ptr<std::vector<uint16_t>>> remote_destination_ports;
 #else
@@ -78,7 +80,7 @@ class client_mode
 	std::shared_ptr<KCP::KCP> verify_kcp_conv(std::shared_ptr<KCP::KCP> kcp_ptr, uint32_t conv);
 	int kcp_sender(const char *buf, int len, void *user);
 	void data_sender(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, size_t buffer_size);
-	void fec_maker(kcp_mappings *kcp_mappings_ptr, const uint8_t *input_data, int data_size);
+	void fec_maker(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, uint8_t *input_data, int data_size);
 	std::tuple<uint8_t*, size_t> fec_unpack(std::shared_ptr<KCP::KCP> &kcp_ptr, uint8_t *original_data_ptr, size_t plain_size);
 	bool fec_find_missings(KCP::KCP *kcp_ptr, fec_control_data &fec_controllor, uint32_t fec_sn, uint8_t max_fec_data_count);
 
@@ -124,6 +126,7 @@ public:
 		io_context_light(io_context_light),
 		io_context_heavy(io_context_heavy),
 		kcp_updater(kcp_updater_ref),
+		fecc(fec_initialse(settings.fec_original_packet_count, settings.fec_redundant_packet_count)),
 		timer_find_expires(io_context_light),
 		timer_expiring_kcp(io_context_light),
 		timer_keep_alive(io_context_light),
@@ -145,6 +148,7 @@ public:
 		timer_status_log(std::move(existing_client.timer_status_log)),
 		parallel_pool(existing_client.parallel_pool),
 		current_settings(std::move(existing_client.current_settings)),
+		fecc(fec_initialse(current_settings.fec_original_packet_count, current_settings.fec_redundant_packet_count)),
 		conn_options{ .ip_version_only = current_settings.ip_version_only,
 					  .fib_ingress = current_settings.fib_ingress,
 					  .fib_egress = current_settings.fib_egress }

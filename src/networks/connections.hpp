@@ -20,7 +20,6 @@
 
 #include "../shares/share_defines.hpp"
 #include "../3rd_party/task_thread_pool.hpp"
-#include "../3rd_party/fecpp.hpp"
 #include "stun.hpp"
 #include "kcp.hpp"
 
@@ -143,6 +142,9 @@ namespace packet
 #pragma pack(pop)
 
 	constexpr size_t empty_data_size = sizeof(data_layer);
+	constexpr uint16_t raw_header_size = sizeof(packet::packet_layer) - 1;
+	constexpr uint16_t raw_header_fec_size = sizeof(packet::packet_layer_fec) - 1;
+	constexpr uint16_t raw_header_fec_data_size = sizeof(packet::packet_layer_data) - 1;
 
 	uint64_t htonll(uint64_t value) noexcept;
 	uint64_t ntohll(uint64_t value) noexcept;
@@ -169,6 +171,7 @@ namespace packet
 	std::vector<uint8_t> create_inner_packet(feature ftr, protocol_type prtcl, const std::vector<uint8_t> &data);
 	std::vector<uint8_t> create_inner_packet(feature ftr, protocol_type prtcl, const uint8_t *input_data, size_t data_size);
 	size_t create_inner_packet(feature ftr, protocol_type prtcl, uint8_t *input_data, size_t data_size);
+	std::pair<uint8_t *, int> prepend_fec_header(uint8_t *input_data, int data_size, uint32_t fec_sn, uint8_t fec_sub_sn);
 
 	std::tuple<uint32_t, uint8_t*, size_t> unpack(uint8_t *data, size_t length);
 	std::tuple<packet_layer_data, uint8_t*, size_t> unpack_fec(uint8_t *data, size_t length);
@@ -611,7 +614,7 @@ struct fec_control_data
 	std::mutex mutex_fec_rcv;
 	std::map<uint32_t, std::map<uint16_t, std::pair<std::unique_ptr<uint8_t[]>, size_t>>> fec_rcv_cache;	// uint32_t = snd_sn, uint16_t = sub_sn
 	std::unordered_set<uint32_t> fec_rcv_restored;
-	fecpp::fec_code fecc;
+	Botan::ZFEC *fecc;
 };
 
 struct encryption_result

@@ -20,9 +20,10 @@
 #ifdef __cpp_lib_format
 #include <format>
 #endif
+#include <botan/zfec.h>
 
 constexpr std::string_view app_name = "kcptube";
-constexpr std::string_view app_version = "20260131";
+constexpr std::string_view app_version = "20260207";
 
 enum class running_mode { unknow, server, client, relay, relay_ingress, relay_egress };
 enum class kcp_mode { unknow, regular1, regular2, regular3, regular4, regular5, fast1, fast2, fast3, fast4, fast5, fast6, manual };
@@ -130,8 +131,8 @@ struct user_settings
 	uint16_t udp_timeout = 0;	 // seconds
 	uint16_t keep_alive = 0;	// seconds
 	uint16_t mux_tunnels = 0;	// client only
-	uint8_t fec_data = 0;
-	uint8_t fec_redundant = 0;
+	uint8_t fec_original_packet_count = 0;
+	uint8_t fec_redundant_packet_count = 0;
 	encryption_mode encryption = encryption_mode::empty;
 	running_mode mode = running_mode::unknow;
 	kcp_mode kcp_setting = kcp_mode::unknow;
@@ -203,5 +204,6 @@ void print_ip_to_file(const std::string &message, const std::filesystem::path &l
 void print_message_to_file(const std::string &message, const std::filesystem::path &log_file);
 void print_status_to_file(const std::string &message, const std::filesystem::path &log_file);
 std::string to_speed_unit(size_t value, size_t duration_seconds);
+std::unique_ptr<Botan::ZFEC> fec_initialse(size_t fec_original_packet_count, size_t fec_redundant_packet_count);
 
 #endif // !_SHARE_HEADER_

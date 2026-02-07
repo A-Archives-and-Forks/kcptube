@@ -82,6 +82,3 @@ regular4, regular5:
 For those who desire to set a higher D value and are not concerned about high latency, please use manual configuration mode and specify a higher kcp_resend value.
 
 If the reason for setting a higher D value is to wrap a tunnel for VPN such as OpenVPN or WireGuard, please consider using [UDP Hop](https://github.com/cnbatch/udphop).
-
-## FEC Source Code
-The FEC Library using by KCPTube is from [fecpp](https://github.com/randombit/fecpp) with some modifications.

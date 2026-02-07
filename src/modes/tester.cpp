@@ -119,7 +119,7 @@ int test_mode::kcp_sender(const char *buf, int len, void *user)
 		return 0;
 
 	kcp_mappings *kcp_mappings_ptr = (kcp_mappings *)user;
-	if (current_settings.fec_data == 0 || current_settings.fec_redundant == 0)
+	if (fecc == nullptr)
 	{
 		auto [new_buffer, buffer_size] = packet::create_packet((const uint8_t *)buf, len);
 		data_sender(kcp_mappings_ptr, std::move(new_buffer), buffer_size);
@@ -244,12 +244,7 @@ std::shared_ptr<kcp_mappings> test_mode::create_handshake(size_t index, asio::ip
 	std::atomic_store(&(handshake_kcp_mappings->egress_target_endpoint), egress_target_endpoint);
 	handshake_kcp_mappings->egress_forwarder = udp_forwarder;
 	handshake_kcp_mappings->egress_endpoint_index = index;
-	if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
-	{
-		size_t K = current_settings.fec_data;
-		size_t N = K + current_settings.fec_redundant;
-		handshake_kcp_mappings->fec_egress_control.fecc.reset_martix(K, N);
-	}
+	handshake_kcp_mappings->fec_egress_control.fecc = fecc.get();
 
 	handshake_kcp->SetMTU(current_settings.kcp_mtu);
 	handshake_kcp->NoDelay(1, 1, 3, 1);
@@ -336,7 +331,7 @@ void test_mode::handle_handshake(std::shared_ptr<KCP::KCP> kcp_ptr, std::unique_
 	if (calculate_difference<int64_t>((uint32_t)timestamp, packet_timestamp) > gbv_time_gap_seconds)
 		return;
 
-	if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
+	if (fecc != nullptr)
 	{
 		auto [packet_header, kcp_data_ptr, kcp_data_size] = packet::unpack_fec(data.get(), plain_size);
 		data_ptr = kcp_data_ptr;

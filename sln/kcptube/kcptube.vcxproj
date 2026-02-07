@@ -27,8 +27,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\3rd_party\fecpp.cpp" />
-    <ClCompile Include="..\..\src\3rd_party\fecpp_ssse3.cpp" />
     <ClCompile Include="..\..\src\3rd_party\ikcp.cpp" />
     <ClCompile Include="..\..\src\main.cpp" />
     <ClCompile Include="..\..\src\modes\client.cpp" />
@@ -46,7 +44,6 @@
     <ClCompile Include="..\..\src\shares\share_defines.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\3rd_party\fecpp.hpp" />
     <ClInclude Include="..\..\src\3rd_party\ikcp.hpp" />
     <ClInclude Include="..\..\src\3rd_party\task_thread_pool.hpp" />
     <ClInclude Include="..\..\src\modes\client.hpp" />

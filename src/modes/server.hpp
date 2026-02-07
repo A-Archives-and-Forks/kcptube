@@ -22,6 +22,7 @@ class server_mode
 	std::shared_mutex mutex_ipv6;
 	std::array<uint8_t, 16> external_ipv6_address;
 	const std::array<uint8_t, 16> zero_value_array;
+	const std::unique_ptr<Botan::ZFEC> fecc;
 
 	std::vector<std::unique_ptr<udp_server>> udp_servers;
 
@@ -78,7 +79,7 @@ class server_mode
 	void data_sender(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, size_t buffer_size);
 	//void parallel_encrypt(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> data, size_t data_size);
 	//void parallel_decrypt(std::unique_ptr<uint8_t[]> data, size_t data_size, const udp::endpoint &peer, udp_server *listener_ptr);
-	void fec_maker(kcp_mappings *kcp_mappings_ptr, const uint8_t *input_data, int data_size);
+	void fec_maker(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, uint8_t *input_data, int data_size);
 	bool fec_find_missings(KCP::KCP *kcp_ptr, fec_control_data &fec_controllor, uint32_t fec_sn, uint8_t max_fec_data_count);
 
 	void process_tcp_disconnect(tcp_session *session, std::weak_ptr<KCP::KCP> kcp_ptr_weak, bool inform_peer = true);
@@ -107,6 +108,7 @@ public:
 		io_context_light(io_context_light),
 		io_context_heavy(io_context_heavy),
 		kcp_updater(kcp_updater_ref),
+		fecc(fec_initialse(settings.fec_original_packet_count, settings.fec_redundant_packet_count)),
 		timer_find_expires(io_context_light), timer_expiring_kcp(io_context_light),
 		timer_stun(io_context_light), timer_keep_alive(io_context_light),
 		timer_status_log(io_context_light),
@@ -144,6 +146,7 @@ public:
 		external_ipv6_address{ existing_server.external_ipv6_address },
 		zero_value_array{},
 		current_settings(std::move(existing_server.current_settings)),
+		fecc(fec_initialse(current_settings.fec_original_packet_count, current_settings.fec_redundant_packet_count)),
 		conn_options{ .ip_version_only = current_settings.ip_version_only,
 					  .fib_ingress = current_settings.fib_ingress,
 					  .fib_egress = current_settings.fib_egress }

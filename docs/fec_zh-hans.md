@@ -83,6 +83,3 @@ regular4, regular5:
 若想设置较高的 D 值、不介意高延迟，请使用手动配置模式，自行指定较高的 kcp_resend 数值。
 
 如果设置较高 D 值的原因是想要为 OpenVPN 或 WireGuard 之类的 VPN 套一层隧道，请考虑使用 [UDP Hop](https://github.com/cnbatch/udphop)。
-
-## FEC 源码库
-KCPTube 使用的 FEC 来自于 [fecpp](https://github.com/randombit/fecpp)，并作了些许修改。

@@ -179,12 +179,12 @@ void server_mode::udp_listener_incoming_unpack(std::unique_ptr<uint8_t[]> data, 
 	std::pair<std::unique_ptr<uint8_t[]>, size_t> original_data;
 	uint32_t fec_sn = 0;
 	uint8_t fec_sub_sn = 0;
-	if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
+	if (fecc != nullptr)
 	{
 		auto [packet_header, kcp_data_ptr, kcp_data_size] = packet::unpack_fec(data.get(), plain_size);
 		fec_sn = packet_header.sn;
 		fec_sub_sn = packet_header.sub_sn;
-		if (packet_header.sub_sn >= current_settings.fec_data)
+		if (packet_header.sub_sn >= current_settings.fec_original_packet_count)
 		{
 			auto [packet_header_redundant, redundant_data_ptr, redundant_data_size] = packet::unpack_fec_redundant(data.get(), plain_size);
 			conv = packet_header_redundant.kcp_conv;
@@ -201,7 +201,7 @@ void server_mode::udp_listener_incoming_unpack(std::unique_ptr<uint8_t[]> data, 
 			std::copy_n(redundant_data_ptr, redundant_data_size, original_data.first.get());
 			std::scoped_lock fec_locker{ kcp_mappings_ptr->fec_ingress_control.mutex_fec_rcv };
 			kcp_mappings_ptr->fec_ingress_control.fec_rcv_cache[fec_sn][fec_sub_sn] = std::move(original_data);
-			if (!fec_find_missings(kcp_mappings_ptr->ingress_kcp.get(), kcp_mappings_ptr->fec_ingress_control, fec_sn, current_settings.fec_data))
+			if (!fec_find_missings(kcp_mappings_ptr->ingress_kcp.get(), kcp_mappings_ptr->fec_ingress_control, fec_sn, current_settings.fec_original_packet_count))
 				return;
 			data_ptr = nullptr;
 			packet_data_size = 0;
@@ -242,11 +242,11 @@ void server_mode::udp_listener_incoming_unpack(std::unique_ptr<uint8_t[]> data, 
 
 		kcp_ptr = kcp_mappings_ptr->ingress_kcp;
 
-		if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
+		if (fecc != nullptr)
 		{
 			std::scoped_lock fec_locker{ kcp_mappings_ptr->fec_ingress_control.mutex_fec_rcv };
 			kcp_mappings_ptr->fec_ingress_control.fec_rcv_cache[fec_sn][fec_sub_sn] = std::move(original_data);
-			fec_find_missings(kcp_ptr.get(), kcp_mappings_ptr->fec_ingress_control, fec_sn, current_settings.fec_data);
+			fec_find_missings(kcp_ptr.get(), kcp_mappings_ptr->fec_ingress_control, fec_sn, current_settings.fec_original_packet_count);
 		}
 
 		kcp_ptr->Input((const char *)data_ptr, (long)packet_data_size);
@@ -401,7 +401,7 @@ void server_mode::udp_listener_incoming_new_connection(std::unique_ptr<uint8_t[]
 		return;
 	auto [timestamp, data_ptr, packet_data_size] = packet::unpack(data.get(), data_size);
 
-	if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
+	if (fecc != nullptr)
 	{
 		auto [packet_header, kcp_data_ptr, kcp_data_size] = packet::unpack_fec(data.get(), data_size);
 		data_ptr = kcp_data_ptr;
@@ -431,12 +431,7 @@ void server_mode::udp_listener_incoming_new_connection(std::unique_ptr<uint8_t[]
 			handshake_kcp_mappings->egress_target_endpoint = std::make_shared<udp::endpoint>();
 			handshake_kcp_mappings->egress_previous_target_endpoint = std::make_shared<udp::endpoint>();
 
-			if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
-			{
-				size_t K = current_settings.fec_data;
-				size_t N = K + current_settings.fec_redundant;
-				handshake_kcp_mappings_ptr->fec_ingress_control.fecc.reset_martix(K, N);
-			}
+			handshake_kcp_mappings_ptr->fec_ingress_control.fecc = fecc.get();
 
 			handshake_kcp->SetUserData(handshake_kcp_mappings_ptr);
 			handshake_kcp->SetMTU(current_settings.kcp_mtu);
@@ -503,14 +498,8 @@ void server_mode::udp_listener_incoming_new_connection(std::unique_ptr<uint8_t[]
 				data_kcp->NoDelay(current_settings.kcp_nodelay, current_settings.kcp_interval, current_settings.kcp_resend, current_settings.kcp_nc);
 				data_kcp->Update();
 				data_kcp->RxMinRTO() = 10;
-				data_kcp->SetBandwidth(outbound_bandwidth, current_settings.inbound_bandwidth);
-				
-				if (current_settings.fec_data > 0 && current_settings.fec_redundant > 0)
-				{
-					size_t K = current_settings.fec_data;
-					size_t N = K + current_settings.fec_redundant;
-					data_kcp_mappings->fec_ingress_control.fecc.reset_martix(K, N);
-				}
+				data_kcp->SetBandwidth(outbound_bandwidth, current_settings.inbound_bandwidth);				
+				data_kcp_mappings->fec_ingress_control.fecc = fecc.get();
 
 				bool connect_success = false;
 
@@ -620,7 +609,7 @@ bool server_mode::create_new_tcp_connection(std::shared_ptr<KCP::KCP> handshake_
 	{
 		tcp_connector_incoming(std::move(data), data_size, target_session, weak_data_kcp);
 	};
-	tcp_client target_connector(io_context_light, callback_function, conn_options);
+	tcp_client target_connector(io_context_heavy, callback_function, conn_options);
 	std::string destination_address = current_settings.destination_address_list.front();
 	uint16_t destination_port = current_settings.destination_ports.front();
 
@@ -699,7 +688,7 @@ bool server_mode::create_new_udp_connection(std::shared_ptr<KCP::KCP> handshake_
 	{
 		try
 		{
-			target_connector = std::make_shared<udp_client>(io_context_light, udp_func_ap, conn_options);
+			target_connector = std::make_shared<udp_client>(io_context_heavy, udp_func_ap, conn_options);
 		}
 		catch (...)
 		{
@@ -808,7 +797,7 @@ std::shared_ptr<mux_records> server_mode::create_mux_data_tcp_connection(uint32_
 		{
 			mux_tunnels->read_tcp_data_to_cache(std::move(data), data_size, target_session, kcp_session_weak, mux_records_ptr_weak);
 		};
-	tcp_client target_connector(io_context_light, callback_function, conn_options);
+	tcp_client target_connector(io_context_heavy, callback_function, conn_options);
 	std::string destination_address = current_settings.destination_address_list.front();
 	uint16_t destination_port = current_settings.destination_ports.front();
 
@@ -859,7 +848,7 @@ std::shared_ptr<mux_records> server_mode::create_mux_data_udp_connection(uint32_
 	{
 		try
 		{
-			target_connector = std::make_shared<udp_client>(io_context_light, udp_func_ap, conn_options);
+			target_connector = std::make_shared<udp_client>(io_context_heavy, udp_func_ap, conn_options);
 		}
 		catch (...)
 		{
@@ -903,14 +892,21 @@ int server_mode::kcp_sender(const char *buf, int len, void *user)
 	if (std::atomic_load(&(kcp_mappings_ptr->ingress_source_endpoint)) == nullptr)
 		return 0;
 
-	if (current_settings.fec_data == 0 || current_settings.fec_redundant == 0)
+	if (fecc == nullptr)
 	{
 		auto [new_buffer, buffer_size] = packet::create_packet((const uint8_t*)buf, len);
 		data_sender(kcp_mappings_ptr, std::move(new_buffer), buffer_size);
 	}
 	else
 	{
-		fec_maker(kcp_mappings_ptr, (const uint8_t *)buf, len);
+		std::unique_ptr<uint8_t[]> new_buffer = std::make_unique_for_overwrite<uint8_t[]>(len + packet::raw_header_fec_data_size + gbv_buffer_expand_size);
+		uint8_t *data_ptr = new_buffer.get() + packet::raw_header_fec_data_size;
+		std::copy_n((const uint8_t *)buf, len, data_ptr);
+		asio::post(io_context_light, [this, kcp_mappings_ptr, new_buffer = std::move(new_buffer), len, data_ptr]() mutable
+			{
+				fec_maker(kcp_mappings_ptr, std::move(new_buffer), data_ptr, len);
+			});
+		//fec_maker(kcp_mappings_ptr, (const uint8_t *)buf, len);
 	}
 	return 0;
 }
@@ -929,49 +925,47 @@ void server_mode::data_sender(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<ui
 		});
 }
 
-void server_mode::fec_maker(kcp_mappings *kcp_mappings_ptr, const uint8_t *input_data, int data_size)
+void server_mode::fec_maker(kcp_mappings *kcp_mappings_ptr, std::unique_ptr<uint8_t[]> new_buffer, uint8_t *input_data, int data_size)
 {
-	thread_local std::vector<std::pair<std::unique_ptr<uint8_t[]>, size_t>> send_cache{ unsigned(current_settings.fec_data) + current_settings.fec_redundant };
-	send_cache.clear();
 	fec_control_data &fec_controllor = kcp_mappings_ptr->fec_ingress_control;
-	std::unique_lock fec_locker{ kcp_mappings_ptr->fec_ingress_control.mutex_fec_snd };
 
 	int conv = kcp_mappings_ptr->ingress_kcp->GetConv();
-	auto [fec_data_buffer, fec_data_buffer_size] = packet::create_fec_data_packet(
+	auto [fec_data_buffer, fec_data_buffer_size] = packet::prepend_fec_header(
 		input_data, data_size, fec_controllor.fec_snd_sn.load(), fec_controllor.fec_snd_sub_sn++);
-	send_cache.emplace_back(std::pair{ std::move(fec_data_buffer), fec_data_buffer_size });
-	//data_sender(kcp_mappings_ptr, std::move(fec_data_buffer), fec_data_buffer_size);
 
 	if (conv == 0)
 	{
 		fec_controllor.fec_snd_sub_sn.store(0);
+		data_sender(kcp_mappings_ptr, std::move(new_buffer), fec_data_buffer_size);
 		return;
 	}
 
 	fec_controllor.fec_snd_cache.emplace_back(clone_into_pair(input_data, data_size));
+	data_sender(kcp_mappings_ptr, std::move(new_buffer), fec_data_buffer_size);
 
-	if (fec_controllor.fec_snd_cache.size() == current_settings.fec_data)
+	if (fec_controllor.fec_snd_cache.size() == current_settings.fec_original_packet_count)
 	{
 		auto [array_data, fec_align_length, total_size] = compact_into_container(fec_controllor.fec_snd_cache);
-		auto redundants = fec_controllor.fecc.encode(array_data.get(), total_size, fec_align_length);
-		for (auto &data_ptr : redundants)
-		{
-			auto [fec_redundant_buffer, fec_redundant_buffer_size] = packet::create_fec_redundant_packet(
-				data_ptr.get(), (int)fec_align_length, fec_controllor.fec_snd_sn.load(), fec_controllor.fec_snd_sub_sn++, conv);
-			send_cache.emplace_back(std::pair{ std::move(fec_redundant_buffer), fec_redundant_buffer_size });
-			//data_sender(kcp_mappings_ptr, std::move(fec_redundant_buffer), fec_redundant_buffer_size);
-		}
+		auto encoder_fn_skip = [](size_t, const uint8_t *, size_t) {};
+		auto encoder_fn_invoke = [&](size_t share, const uint8_t bits[], size_t length)
+			{
+				auto [fec_redundant_buffer, fec_redundant_buffer_size] = packet::create_fec_redundant_packet(
+					bits, (int)length, fec_controllor.fec_snd_sn.load(), fec_controllor.fec_snd_sub_sn++, conv);
+				data_sender(kcp_mappings_ptr, std::move(fec_redundant_buffer), fec_redundant_buffer_size);
+			};
+
+		Botan::ZFEC::output_cb_t encoder_cb_fn[2] = { encoder_fn_skip, encoder_fn_invoke };
+		auto encoder_fn = [&](size_t share, const uint8_t bits[], size_t length)
+			{
+				int invoke_at = int(share >= current_settings.fec_original_packet_count);
+				encoder_cb_fn[invoke_at](share, bits, length);
+			};
+		fec_controllor.fecc->encode(array_data.get(), total_size, encoder_fn);
+
 		fec_controllor.fec_snd_cache.clear();
 		fec_controllor.fec_snd_sub_sn.store(0);
 		fec_controllor.fec_snd_sn++;
 	}
-	fec_locker.unlock();
-
-	for (auto &[send_data_ptr, send_size] : send_cache)
-	{
-		data_sender(kcp_mappings_ptr, std::move(send_data_ptr), send_size);
-	}
-	send_cache.clear();
 }
 
 bool server_mode::fec_find_missings(KCP::KCP *kcp_ptr, fec_control_data &fec_controllor, uint32_t fec_sn, uint8_t max_fec_data_count)
@@ -1004,13 +998,30 @@ bool server_mode::fec_find_missings(KCP::KCP *kcp_ptr, fec_control_data &fec_con
 		}
 		auto [recv_data, fec_align_length] = compact_into_container(mapped_data, max_fec_data_count);
 		auto array_data = mapped_pair_to_mapped_pointer(recv_data);
-		auto restored_data = fec_controllor.fecc.decode(array_data, fec_align_length);
+		auto decoder_fn_skip = [](size_t, const uint8_t *, size_t) {};
+		auto decoder_fn_invoke = [&](size_t index, const uint8_t bits[], size_t length)
+			{
+				auto [missed_data_ptr, missed_data_size] = extract_from_container(bits);
+				kcp_ptr->Input((const char *)missed_data_ptr, (long)missed_data_size);
+				status_counters.fec_recovery_count++;
+			};
 
-		for (auto &[i, data] : restored_data)
+		Botan::ZFEC::output_cb_t decoder_cb_fn[2] = { decoder_fn_skip, decoder_fn_invoke };
+		auto decoder_fn = [&](size_t index, const uint8_t bits[], size_t length)
+			{
+				int invoke_at = int(!mapped_data.contains((uint16_t)index));
+				decoder_cb_fn[invoke_at](index, bits, length);
+			};
+
+		try
 		{
-			auto [missed_data_ptr, missed_data_size] = extract_from_container(data);
-			kcp_ptr->Input((const char *)missed_data_ptr, (long)missed_data_size);
-			status_counters.fec_recovery_count++;
+			fec_controllor.fecc->decode_shares(array_data, fec_align_length, decoder_fn);
+		}
+		catch (std::exception &ex)
+		{
+			std::string error_message = time_to_string_with_square_brackets() + ex.what() + "\n";
+			std::cerr << error_message;
+			print_message_to_file(error_message, current_settings.log_messages);
 		}
 
 		fec_controllor.fec_rcv_restored.insert(sn);
