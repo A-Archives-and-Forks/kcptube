@@ -179,6 +179,9 @@ std::string_view feature_to_string(feature ftr)
 	case feature::keep_alive:
 		str = "keep_alive";
 		break;
+	case feature::keep_alive_response:
+		str = "keep_alive";
+		break;
 	case feature::raw_data:
 		str = "data";
 		break;

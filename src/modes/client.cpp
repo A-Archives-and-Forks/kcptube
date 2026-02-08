@@ -10,7 +10,6 @@ using namespace std::placeholders;
 using namespace std::chrono;
 using namespace std::literals;
 
-
 client_mode::~client_mode()
 {
 	timer_expiring_kcp.cancel();
@@ -1036,7 +1035,7 @@ void client_mode::local_disconnect(std::shared_ptr<KCP::KCP> kcp_ptr, std::share
 
 	std::vector<uint8_t> data = packet::inform_disconnect_packet(protocol_type::tcp);
 	kcp_ptr->Send((const char *)data.data(), data.size());
-	uint32_t next_update_time = kcp_ptr->Check();
+	uint32_t next_update_time = kcp_ptr->Refresh();
 	kcp_updater.submit(kcp_ptr, next_update_time);
 
 	session->session_is_ending(true);
@@ -1476,32 +1475,7 @@ void client_mode::loop_find_expires()
 		bool clean_by_force = kcp_last_activity_gap > gbv_time_gap_seconds;
 
 		if (kcp_mappings_ptr->connection_protocol == protocol_type::tcp)
-		{
-			tcp_session *tcp_channel = kcp_mappings_ptr->local_tcp.get();
-			if (tcp_channel->is_stop() || !tcp_channel->is_open() || clean_by_force)
-			{
-				locker_expiring_kcp.lock();
-				if (expiring_kcp.find(kcp_mappings_ptr) == expiring_kcp.end())
-				{
-					tcp_channel->session_is_ending(true);
-					tcp_channel->stop();
-					std::shared_ptr<forwarder> egress_forwarder = std::atomic_load(&(kcp_mappings_ptr->egress_forwarder));
-					egress_forwarder->stop();
-					expiring_kcp.insert({ kcp_mappings_ptr, time_right_now });
-				}
-				locker_expiring_kcp.unlock();
-
-				locker_kcp_keepalive.lock();
-				if (kcp_keepalive.find(kcp_ptr) != kcp_keepalive.end())
-					kcp_keepalive.erase(kcp_ptr);
-				locker_kcp_keepalive.unlock();
-
-				kcp_channels.erase(iter);
-				kcp_ptr->SetOutput(empty_kcp_output);
-				kcp_ptr->SetPostUpdate(empty_kcp_postupdate);
-				kcp_ptr->SetUserData(nullptr);
-			}
-		}
+			continue;
 
 		if (kcp_mappings_ptr->connection_protocol == protocol_type::udp)
 		{

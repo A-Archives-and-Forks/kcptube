@@ -270,6 +270,7 @@ void server_mode::udp_listener_incoming_unpack(std::unique_ptr<uint8_t[]> data, 
 		kcp_mappings_ptr->ingress_listener.store(listener_ptr);
 
 		auto [ftr, prtcl, unpacked_data_ptr, unpacked_data_size] = packet::unpack_inner(buffer_ptr, kcp_data_size);
+		
 		switch (ftr)
 		{
 		case feature::raw_data:
@@ -1213,7 +1214,7 @@ void server_mode::cleanup_expiring_handshake_connections()
 
 		std::shared_ptr<KCP::KCP> kcp_ptr = kcp_mappings_ptr->ingress_kcp;
 		int64_t expire_time = iter->second;
-		if (time_right_now - expire_time < (int64_t)gbv_kcp_cleanup_waits)
+		if (time_right_now - expire_time < gbv_kcp_cleanup_waits)
 			continue;
 
 		kcp_mappings_ptr->mapping_function();
@@ -1243,7 +1244,7 @@ void server_mode::cleanup_expiring_data_connections()
 		int64_t expire_time = iter->second;
 		uint32_t conv = kcp_ptr->GetConv();
 
-		if (time_right_now - expire_time < (int64_t)gbv_kcp_cleanup_waits)
+		if (time_right_now - expire_time < gbv_kcp_cleanup_waits)
 			continue;
 
 		kcp_ptr->SetOutput(empty_kcp_output);
