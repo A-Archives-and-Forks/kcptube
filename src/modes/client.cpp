@@ -1474,6 +1474,21 @@ void client_mode::loop_find_expires()
 		bool keep_alive_timed_out = current_settings.keep_alive > 0 ? std::min(kcp_last_activity_gap, kcp_keep_alive_gap) > timeout_seconds : kcp_last_activity_gap > gbv_keepalive_timeout;
 		bool clean_by_force = kcp_last_activity_gap > gbv_time_gap_seconds;
 
+		if (kcp_last_activity_gap > 0)
+		{
+			size_t selected_index = randomly_pick_index(current_settings.destination_address_list.size());
+			const std::string &destination_address = current_settings.destination_address_list[selected_index];
+			asio::error_code ec;
+			asio::ip::make_address(destination_address, ec);
+			if (ec)
+			{
+				std::shared_ptr<forwarder> egress_forwarder = std::atomic_load(&(kcp_mappings_ptr->egress_forwarder));
+				std::shared_ptr<udp::endpoint> egress_target_endpoint = get_udp_target(egress_forwarder, selected_index);
+				if (egress_target_endpoint != nullptr)
+					kcp_mappings_ptr->egress_target_endpoint = egress_target_endpoint;
+			}
+		}
+
 		if (kcp_mappings_ptr->connection_protocol == protocol_type::tcp)
 			continue;
 
@@ -1577,7 +1592,7 @@ void client_mode::loop_keep_alive()
 		std::vector<uint8_t> keep_alive_packet = packet::create_keep_alive_packet(kcp_mappings_ptr->connection_protocol);
 		kcp_ptr->Send((const char*)keep_alive_packet.data(), keep_alive_packet.size());
 
-		uint32_t next_update_time = kcp_ptr->Check();
+		uint32_t next_update_time = current_settings.blast ? kcp_ptr->Refresh() : kcp_ptr->Check();
 		kcp_updater.submit(kcp_ptr, next_update_time);
 		kcp_ptr->keep_alive_send_time.store(packet::right_now());
 	}

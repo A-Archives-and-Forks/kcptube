@@ -1381,7 +1381,7 @@ void server_mode::loop_keep_alive()
 		std::vector<uint8_t> keep_alive_packet = packet::create_keep_alive_packet(ptype);
 		kcp_ptr->Send((const char*)keep_alive_packet.data(), keep_alive_packet.size());
 
-		uint32_t next_update_time = kcp_ptr->Check();
+		uint32_t next_update_time = current_settings.blast ? kcp_ptr->Refresh() : kcp_ptr->Check();
 		kcp_updater.submit(kcp_ptr, next_update_time);
 		kcp_ptr->keep_alive_send_time.store(packet::right_now());
 	}

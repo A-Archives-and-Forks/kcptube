@@ -1806,6 +1806,22 @@ void relay_mode::loop_find_expires()
 
 		bool cleaned_up = false;
 
+		if (egress_last_activity_gap > 0)
+		{
+			size_t selected_index = randomly_pick_index(current_settings.egress->destination_address_list.size());
+			const std::string &destination_address = current_settings.egress->destination_address_list[selected_index];
+			asio::error_code ec;
+			asio::ip::make_address(destination_address, ec);
+			if (ec)
+			{
+				std::shared_ptr<forwarder> egress_forwarder = std::atomic_load(&(kcp_mappings_ptr->egress_forwarder));
+				std::shared_ptr<udp::endpoint> egress_target_endpoint = get_udp_target(egress_forwarder, selected_index);
+				if (egress_target_endpoint != nullptr)
+					kcp_mappings_ptr->egress_target_endpoint = egress_target_endpoint;
+			}
+		}
+
+
 		if (ingress_clean_by_force || egress_clean_by_force ||
 			(calculate_difference(time_right_now, kcp_mappings_ptr->last_data_transfer_time.load()) > current_settings.egress->udp_timeout &&
 			calculate_difference(time_right_now, kcp_ptr_ingress->LastInputTime()) > current_settings.egress->udp_timeout &&
